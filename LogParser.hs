@@ -1,6 +1,8 @@
-module LogParser where
+{-# LANGUAGE  TemplateHaskell #-}
+module LogParser (LogEntry, LogEntries, FileChange, parseLog, filename, added, deleted, title, description, author, date, guid, filechanges) where
 
 import Data.Time
+import Control.Lens hiding (noneOf)
 import Data.Time.Format
 import Data.Time.Clock
 import Control.Applicative hiding (optional,(<|>),many)
@@ -11,22 +13,26 @@ import qualified Text.ParserCombinators.Parsec.Token as Token
 
 
 -- Filename, Added lines, deleted lines
-data FileChange = FileChange { filename :: String,
+data FileChange = FileChange { _filename :: String,
                                -- No added or deleted lines for binary files.
-                               added :: Maybe Integer,
-                               deleted :: Maybe Integer
+                               _added :: Maybe Integer,
+                               _deleted :: Maybe Integer
                              } deriving (Show)
                                         
 type FileChanges = [FileChange]
 
-data LogEntry = LogEntry { title :: String,
-                     description :: String,
-                     author :: String,
-                     date :: Data.Time.UTCTime,
-                     guid :: String,
-                     -- Commits without file changes are possible (git commit --allow-empty)
-                     filechanges :: Maybe FileChanges
+data LogEntry = LogEntry { _title :: String,
+                           _description :: String,
+                           _author :: String,
+                           _date :: Data.Time.UTCTime,
+                           _guid :: String,
+                           -- Commits without file changes are possible (git commit --allow-empty)
+                           _filechanges :: Maybe FileChanges
                    } deriving (Show)
+
+
+$(makeLenses ''LogEntry)
+$(makeLenses ''FileChange)
 
 type LogEntries = [LogEntry]
 
@@ -53,9 +59,9 @@ parseSingleChange = do added <- numberOrDash
                        spaces
                        filename <- many1 (noneOf "\x00")
                        char '\x00'
-                       return FileChange {filename = filename,
-                                          added = added,
-                                          deleted = deleted}
+                       return FileChange {_filename = filename,
+                                          _added = added,
+                                          _deleted = deleted}
 
 parseRestChanges:: Parser [FileChange]
 parseRestChanges = ((lookAhead $ char '\x1f') >> return []) <|>
@@ -77,12 +83,12 @@ commit = do
   description <- parseField
   char '\x00'
   changes <- optionMaybe (try (newline *> parseChangeList))
-  return LogEntry { guid = commitid,
-                 author = author,
-                 title = title,
-                 description = description,
-                 date = (parseTimeOrError True defaultTimeLocale rfc822DateFormat datestring):: UTCTime,
-                 filechanges = changes
+  return LogEntry { _guid = commitid,
+                    _author = author,
+                    _title = title,
+                    _description = description,
+                    _date = (parseTimeOrError True defaultTimeLocale rfc822DateFormat datestring):: UTCTime,
+                    _filechanges = changes
                }
 
 logparser:: Parser LogEntries
