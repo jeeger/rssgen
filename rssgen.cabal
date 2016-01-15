@@ -60,7 +60,7 @@ executable rssgen
   -- other-extensions:    
   
   -- Other library packages from which modules are imported.
-  build-depends:       base ==4.7.*, time ==1.5.*, parsec, rss ==3000.2.0.5, lens ==4.13.*, ConfigFile ==1.1.*, mtl
+  build-depends:       base ==4.7.*, time ==1.5.*, parsec, rss ==3000.2.0.5, lens ==4.13.*, ConfigFile ==1.1.*, mtl, network-uri
   
   -- Directories containing source files.
   -- hs-source-dirs:      
