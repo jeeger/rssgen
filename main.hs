@@ -22,6 +22,7 @@ data Config = Config {
   _rssFileLocation :: String,
   _rssTitle :: String,
   _rssLink :: String,
+  _rssCopyright :: String,
   _rssDescription :: String,
   _fromExtension :: String,
   _toExtension :: String
@@ -43,6 +44,7 @@ readConfig p = do cp <- join $ liftIO $ readfile emptyCP p
                   rsslink <- get cp "DEFAULT" "rsslink"
                   fromext <- get cp "DEFAULT" "fromext"
                   toext <- get cp "DEFAULT" "toext"
+                  copyright <- get cp "DEFAULT" "copyright"
                   return Config { _fileSourcePath = fs,
                                   _fileDestURL = fd,
                                   _rssFileLocation = rssloc,
@@ -50,7 +52,8 @@ readConfig p = do cp <- join $ liftIO $ readfile emptyCP p
                                   _rssLink = rsslink,
                                   _rssDescription = rssdesc,
                                   _fromExtension = fromext,
-                                  _toExtension = toext
+                                  _toExtension = toext,
+                                  _rssCopyright = copyright
                                 }
 
 -- Replace all non-overlapping occurrences of old with new.
