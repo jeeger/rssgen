@@ -1,5 +1,5 @@
 {-# LANGUAGE  TemplateHaskell #-}
-module LogParser (LogEntry, LogEntries, FileChange, parseLog, filename, added, deleted, title, description, author, date, guid, filechanges) where
+module LogParser (LogEntry(..), LogEntries, FileChange(..), FileChanges, parseLog, filename, added, deleted, title, description, author, date, guid, filechanges) where
 
 import Data.Time
 import Control.Lens hiding (noneOf)
@@ -15,8 +15,8 @@ import qualified Text.ParserCombinators.Parsec.Token as Token
 -- Filename, Added lines, deleted lines
 data FileChange = FileChange { _filename :: String,
                                -- No added or deleted lines for binary files.
-                               _added :: Maybe Integer,
-                               _deleted :: Maybe Integer
+                               _added :: Integer,
+                               _deleted :: Integer
                              } deriving (Show)
                                         
 type FileChanges = [FileChange]
@@ -43,14 +43,14 @@ natural = Token.natural lexer
 parseField:: Parser String
 parseField = many (noneOf "\x1f") <* char '\x1f'
 
-numberOrDash:: Parser (Maybe Integer)
+numberOrDash:: Parser Integer
 numberOrDash = do num <- try (optionMaybe natural)
                   case num of
                     Just n -> do
-                      return $ Just n
+                      return n
                     Nothing -> do
                       char '-'
-                      return $ Nothing
+                      return 0
 
 parseSingleChange:: Parser FileChange
 parseSingleChange = do added <- numberOrDash
