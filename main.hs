@@ -12,6 +12,8 @@ import Control.Monad
 import Data.String
 import Text.RSS
 import Network.URI
+import Paths_rssgen
+import Data.Version (showVersion)
 
 -- TODO: Generate RSS output
 data Config = Config {
@@ -20,7 +22,9 @@ data Config = Config {
   _rssFileLocation :: String,
   _rssTitle :: String,
   _rssLink :: String,
-  _rssDescription :: String
+  _rssDescription :: String,
+  _fromExtension :: String,
+  _toExtension :: String
   } deriving (Show)
 
 $(makeLenses ''Config)
@@ -37,12 +41,16 @@ readConfig p = do cp <- join $ liftIO $ readfile emptyCP p
                   rssdesc <- get cp "DEFAULT" "rssdesc"
                   rsstitle <- get cp "DEFAULT" "rsstitle"
                   rsslink <- get cp "DEFAULT" "rsslink"
+                  fromext <- get cp "DEFAULT" "fromext"
+                  toext <- get cp "DEFAULT" "toext"
                   return Config { _fileSourcePath = fs,
                                   _fileDestURL = fd,
                                   _rssFileLocation = rssloc,
                                   _rssTitle = rsstitle,
                                   _rssLink = rsslink,
-                                  _rssDescription = rssdesc
+                                  _rssDescription = rssdesc,
+                                  _fromExtension = fromext,
+                                  _toExtension = toext
                                 }
 
 -- Replace all non-overlapping occurrences of old with new.
@@ -53,20 +61,71 @@ replace old new str = if old `isPrefixOf` str then
                       else
                         (head str) : (replace old new (tail str))
 
-filterEntries:: LogEntries -> LogEntries
-filterEntries =
-  map (over description (replace "\nINCLUDE_RSS" ""))
-  . filter (views description (isInfixOf "\nINCLUDE_RSS"))
+
+-- Filter out all entries containing the RSS token, remove RSS token
+-- 
+filterAndRemoveRSSToken:: LogEntries -> LogEntries
+filterAndRemoveRSSToken =
+  let rsstoken = "\n\nINCLUDE_RSS" in
+  map (over description (replace rsstoken ""))
+  . filter (views description (isInfixOf rsstoken))
+
+-- TODO: Make configurable
+generateRSS:: Config -> LogEntries -> RSS
+generateRSS config entries = RSS
+  "The Nybble"
+  (fromJust (parseURI "https://thenybble.de"))
+  "thenybble.de post RSS feed"
+  [ Copyright "©Jan Seeger", Generator $ "rssgen-" ++ (showVersion version)]
+  (map (processEntry config) entries)
+
+-- Find the file with the most added changes, if none, find with most deleted. That is probably
+-- the file with the relevant changes, and so we generate a link from that. Failing that, we just make a link to the
+-- front page.
+-- TODO: Make front page link configurable.
+generateLink:: Config -> LogEntry -> URI
+generateLink cfg entry = generateURL cfg (view filechanges entry)
+
+-- TODO: Make front page link configurable.
+generateURL:: Config -> Maybe FileChanges -> URI
+generateURL cfg Nothing = fromJust $ parseURI (view fileDestURL cfg)
+generateURL cfg (Just changes) = substitute_link cfg $ find_most_edited changes
+  where find_most_edited changes = let (name, _, _) = foldl maximum_changed_file ("src/index.org", 0, 0) changes
+                                       in name
+        substitute_link config =
+          fromJust .
+          parseURI .
+          ((view fileDestURL cfg) ++) .
+          (replace (view fileSourcePath config) "") .
+          (replace (view fromExtension config) (view toExtension config))
 
 
-processEntries:: LogEntries -> Config -> RSS
-processEntries entries config = RSS "thenybble.de" (fromJust (parseURI "https://thenybble.de")) "thenybble.de RSS feed" [] []
+maximum_changed_file:: (String, Integer, Integer) -> FileChange -> (String, Integer, Integer)
+maximum_changed_file orig@(max_fname, max_added, max_deleted) change =
+  if (view added change) > max_added then
+    (view filename change, view added change, view deleted change)
+  else if max_added == 0 then
+         if (view deleted change) > max_deleted then
+           (view filename change, view added change, view deleted change)
+         else
+           orig
+       else
+         orig
+
+processEntry:: Config -> LogEntry -> Item
+processEntry config entry = [ Title (view title entry),
+                              Description (view description entry),
+                              Author (view author entry),
+                              PubDate (view date entry),
+                              Link (generateLink config entry)
+                            ]
 
 runMain:: String -> RSSgenErrorIO ()
 runMain confpath = do conf <- withExceptT (\e -> Left e) $ readConfig confpath
                       lines <- liftIO getContents
                       entries <- withExceptT (\e -> Right e) $ ExceptT $ return $ parseLog lines "standard input"
-                      result <- return $ processEntries (filterEntries entries) conf
+                      result <- return $ generateRSS conf (filterAndRemoveRSSToken entries)
+                      liftIO $ print $ showXML $ rssToXML result
                       return ()
                       
 main = do result <- runExceptT $ runMain "rssgen.conf"
