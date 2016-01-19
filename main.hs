@@ -73,47 +73,44 @@ filterAndRemoveRSSToken =
   map (over description (replace rsstoken ""))
   . filter (views description (isInfixOf rsstoken))
 
--- TODO: Make configurable
 generateRSS:: Config -> LogEntries -> RSS
 generateRSS config entries = RSS
-  "The Nybble"
-  (fromJust (parseURI "https://thenybble.de"))
-  "thenybble.de post RSS feed"
-  [ Copyright "©Jan Seeger", Generator $ "rssgen-" ++ (showVersion version)]
+  (view rssTitle config)
+  (views rssLink (fromJust . parseURI) config)
+  (view rssDescription config)
+  [ (views rssCopyright Copyright config), Generator $ "rssgen-" ++ (showVersion version)]
   (map (processEntry config) entries)
 
 -- Find the file with the most added changes, if none, find with most deleted. That is probably
 -- the file with the relevant changes, and so we generate a link from that. Failing that, we just make a link to the
 -- front page.
--- TODO: Make front page link configurable.
 generateLink:: Config -> LogEntry -> URI
 generateLink cfg entry = generateURL cfg (view filechanges entry)
 
 -- TODO: Make front page link configurable.
 generateURL:: Config -> Maybe FileChanges -> URI
-generateURL cfg Nothing = fromJust $ parseURI (view fileDestURL cfg)
-generateURL cfg (Just changes) = substitute_link cfg $ find_most_edited changes
-  where find_most_edited changes = let (name, _, _) = foldl maximum_changed_file ("src/index.org", 0, 0) changes
+generateURL cfg = substitute_link cfg . find_most_edited cfg
+  where find_most_edited cfg (Just changes) = let (name, _, _) = foldl maximum_changed_file ("", 0, 0) changes
                                        in name
+        find_most_edited cfg Nothing = ""
+        maximum_changed_file orig@(max_fname, max_added, max_deleted) change =
+          if (view added change) > max_added then
+            (view filename change, view added change, view deleted change)
+          else if max_added == 0 then
+                 if (view deleted change) > max_deleted then
+                   (view filename change, view added change, view deleted change)
+                 else
+                   orig
+               else
+                 orig
+        -- Replace source extension with target extension, delete source path, prepend destination URL,
+        -- parse into URI
         substitute_link config =
           fromJust .
           parseURI .
           ((view fileDestURL cfg) ++) .
           (replace (view fileSourcePath config) "") .
           (replace (view fromExtension config) (view toExtension config))
-
-
-maximum_changed_file:: (String, Integer, Integer) -> FileChange -> (String, Integer, Integer)
-maximum_changed_file orig@(max_fname, max_added, max_deleted) change =
-  if (view added change) > max_added then
-    (view filename change, view added change, view deleted change)
-  else if max_added == 0 then
-         if (view deleted change) > max_deleted then
-           (view filename change, view added change, view deleted change)
-         else
-           orig
-       else
-         orig
 
 processEntry:: Config -> LogEntry -> Item
 processEntry config entry = [ Title (view title entry),
