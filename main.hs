@@ -152,7 +152,7 @@ runMain confpath = do conf <- withExceptT formatConfigError $ readConfig confpat
                       lines <- liftIO getContents
                       entries <- withExceptT formatParseError . ExceptT . return $ parseLog  lines "standard input"
                       result <- ExceptT . return . runExcept . generateRSS conf $ filterAndRemoveRSSToken entries
-                      liftIO . print . showXML . rssToXML $ result
+                      liftIO . writeFile (view rssFileLocation conf) . showXML . rssToXML $ result
                       return ()
                       
 main = do result <- runExceptT $ runMain "rssgen.conf"
