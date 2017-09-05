@@ -149,6 +149,7 @@ formatParseError pe = "Parse error: " ++ (unlines . map showMessage $ errorMessa
 
 runMain:: String -> RSSgenErrorIO ()
 runMain confpath = do conf <- withExceptT formatConfigError $ readConfig confpath
+                      liftIO (hSetBinaryMode stdin True)
                       lines <- liftIO getContents
                       entries <- withExceptT formatParseError . ExceptT . return $ parseLog  lines "standard input"
                       result <- ExceptT . return . runExcept . generateRSS conf $ filterAndRemoveRSSToken entries
